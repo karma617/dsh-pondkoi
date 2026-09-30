@@ -4,7 +4,7 @@ window.__ModuleLoader__.load({
     const module = { exports: {} }
 
     /** Client services this half consumes. */
-    const inject = ['remotes', 'sessions']
+    const inject = ['remote', 'sessions']
 
     const POND_BASE = '/plugins/dsh-pondkoi'
     const STORAGE_BONDS = 'dsh-pondkoi-bonds'
@@ -58,11 +58,25 @@ window.__ModuleLoader__.load({
       constructor(toggle) {
         this.toggle = toggle
         this.overlay = null
-        this.shadow = null
+        this.frame = null
         this.bridge = null
         this.destroyed = false
       }
 
+      /**
+       * Mount the pond in a same-origin iframe.
+       *
+       * The shell build rendered the garden in its own Electron WebContentsView,
+       * so the renderer always had a document of its own. A shadow root cannot
+       * substitute: the renderer resolves every element with
+       * `document.getElementById`, which never crosses a shadow boundary, so
+       * `$('pond')` returned null and the canvas was never painted. An iframe
+       * restores that separate-document invariant and `pond.html` loads the same
+       * stylesheet and asset URLs relative to the plugin route.
+       *
+       * The scripts are injected here, after the bridge is installed, so the
+       * renderer's `window.koiPond` read at module scope is always satisfied.
+       */
       mount() {
         if (this.overlay || this.destroyed) return
         const overlay = document.createElement('div')
@@ -71,140 +85,56 @@ window.__ModuleLoader__.load({
           position: 'fixed', inset: '0', zIndex: '2147483000',
           display: 'none', background: '#102d2c',
         })
-        overlay.addEventListener('click', event => {
-          // Clicks outside the pond chrome belong to the conversation beneath.
-          if (event.target === overlay) this.close()
-        })
-        const shadow = overlay.attachShadow({ mode: 'open' })
-        const style = document.createElement('link')
-        style.rel = 'stylesheet'
-        style.href = POND_BASE + '/assets/koi-pond.css'
-        shadow.append(style)
+        const frame = document.createElement('iframe')
+        frame.id = 'dsh-pondkoi-frame'
+        frame.title = '后院鱼塘'
+        Object.assign(frame.style, { width: '100%', height: '100%', border: '0', display: 'block' })
+        overlay.append(frame)
 
-        const host = document.createElement('div')
-        host.className = 'pond-root'
-        shadow.append(host)
+        this.bridge = this.createBridge()
+        const bridge = this.bridge
+        frame.addEventListener('load', () => {
+          if (this.destroyed) return
+          let win
+          try {
+            win = frame.contentWindow
+            // Same-origin by construction; if the browser ever blocks the
+            // document the pond must report that instead of silently blanking.
+            if (!win || !frame.contentDocument) throw new Error('鱼塘 iframe 无法访问文档')
+          } catch (error) {
+            console.warn('dsh-pondkoi: 鱼塘 iframe 不可用', error)
+            this.reportFrameFailure()
+            return
+          }
+          win.koiPond = bridge
+          const doc = frame.contentDocument
+          for (const src of [POND_BASE + '/assets/koi-pond-refraction.js', POND_BASE + '/assets/koi-pond.js']) {
+            const el = doc.createElement('script')
+            el.src = src
+            doc.body.append(el)
+            if (src.endsWith('koi-pond.js')) el.addEventListener('load', () => { void this.sync() }, { once: true })
+          }
+          bridge._emit('visibility', true)
+          void this.sync()
+        }, { once: true })
 
-        const main = document.createElement('main')
-        main.setAttribute('part', 'pond')
-        host.append(main)
-
-        const canvas = document.createElement('canvas')
-        canvas.id = 'pond'
-        canvas.tabIndex = 0
-        canvas.setAttribute('aria-label', '锦鲤池塘：点击水面投喂，方向键移动投喂点，空格投喂')
-        main.append(canvas)
-
-        const running = document.createElement('section')
-        running.id = 'running-sessions'
-        running.className = 'running-sessions'
-        running.setAttribute('aria-live', 'polite')
-        running.setAttribute('aria-label', '正在执行的会话')
-        running.hidden = true
-        running.innerHTML = '<p class="eyebrow">正在执行 <span id="running-count">0</span></p><div id="running-list"></div>'
-        main.append(running)
-
-        const header = document.createElement('header')
-        header.innerHTML = '<div class="seal" aria-hidden="true">庭</div>'
-          + '<div><p class="eyebrow">A LITTLE GARDEN. BETWEEN TASKS</p>'
-          + '<h1>后院鱼塘<span>一池清鲤，日月生长。</span></h1></div>'
-        const tools = document.createElement('nav')
-        tools.className = 'window-tools'
-        tools.setAttribute('aria-label', '庭院视图')
-        const weather = document.createElement('select')
-        weather.id = 'weather-select'
-        weather.title = '天气设置'
-        weather.setAttribute('aria-label', '天气设置')
-        for (const [value, label] of [
-          ['auto', '实时天气 (Open-Meteo)'], ['clear', '手动 · 晴天'], ['overcast', '手动 · 阴天'],
-          ['drizzle', '手动 · 小雨'], ['rain', '手动 · 中雨'], ['storm', '手动 · 暴雨'],
-          ['light_snow', '手动 · 小雪'], ['snow', '手动 · 中雪'], ['heavy_snow', '手动 · 大雪'],
-        ]) weather.append(new Option(label, value))
-        const light = document.createElement('select')
-        light.id = 'light'
-        light.title = '时段设置'
-        light.setAttribute('aria-label', '时段设置')
-        for (const [value, label] of [
-          ['auto', '自动时段'], ['dawn', '手动 · 清晨'], ['day', '手动 · 日间'],
-          ['dusk', '手动 · 傍晚'], ['night', '手动 · 夜间'],
-        ]) light.append(new Option(label, value))
-        const zen = document.createElement('button')
-        zen.id = 'zen'
-        zen.textContent = '禅'
-        zen.title = '禅模式：单击鼠标右键退出'
-        zen.setAttribute('aria-pressed', 'false')
-        tools.append(weather, light, zen)
-        header.append(tools)
-        main.append(header)
-
-        const aside = document.createElement('aside')
-        aside.innerHTML = '<p class="eyebrow">池中住客 <span id="count">–</span></p>'
-          + '<h2>与你一起慢慢长大</h2>'
-          + '<p id="journey">正在读取庭院手记…</p>'
-          + '<div id="fish-list"></div>'
-          + '<div id="profile" hidden>'
-          + '<div class="profile-header"><label for="fish-name">给它一个名字</label>'
-          + '<button type="button" id="close-profile" title="取消选中" aria-label="取消选中">×</button></div>'
-          + '<form id="rename-form"><div class="name-row">'
-          + '<input id="fish-name" required maxlength="32" autocomplete="off"><button>保存</button></div></form>'
-          + '<p id="lineage"></p></div>'
-          + '<p id="eggs"></p>'
-          + '<details><summary>继续观望 · 成长周期</summary>'
-          + '<p>成功发送一条主会话消息，每条锦鲤升 1 级。失败、历史加载、助手回复与原会话重试不计入。</p>'
-          + '<p>满 100 级渐长体型、舒展鳍尾；500 级异性配对产卵，再聊 5 次孵出新鲤。'
-          + '每条鱼一生产卵一次，鱼与卵合计最多 16 位。</p>'
-          + '<p>点击水面投饵，切换「玩水」轻点水面。投喂、进食与陪玩会增加亲密度，'
-          + '也可能遇见花信、蜻蜓、青蛙、流萤或跃水锦鲤。亲密度按本地日期呈现春樱、夏荷、秋枫与冬雪薄雾。'
-          + '投喂不升等级，没有死亡惩罚。</p></details>'
-        main.append(aside)
-
-        const footer = document.createElement('footer')
-        const modeTools = document.createElement('div')
-        modeTools.className = 'tools'
-        modeTools.setAttribute('aria-label', '互动方式')
-        const feed = document.createElement('button')
-        feed.id = 'feed'
-        feed.className = 'active'
-        feed.setAttribute('aria-pressed', 'true')
-        feed.innerHTML = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 12 8 7l7 1 4-3M3 12l5 5 7-1 4 3M2 12h4m14-4 2-2m-2 10 2 2"/></svg>投喂'
-        const ripple = document.createElement('button')
-        ripple.id = 'ripple'
-        ripple.setAttribute('aria-pressed', 'false')
-        ripple.innerHTML = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M2 8q5-5 10 0t10 0M2 12q5-5 10 0t10 0M2 16q5-5 10 0t10 0"/></svg>玩水'
-        modeTools.append(feed, ripple)
-        const hint = document.createElement('p')
-        hint.id = 'hint'
-        hint.textContent = '轻点水面，它会游过来。'
-        const label = document.createElement('span')
-        label.className = 'garden-label'
-        label.innerHTML = '<strong id="period-name">日间</strong><i>·</i><b id="season-name">春季</b><i>·</i>'
-          + '<b id="weather-name">晴天</b><i>·</i><time id="clock">--:--</time><em>日者是日 · KOI GARDEN</em>'
-        footer.append(modeTools, hint, label)
-        main.append(footer)
-
-        const notice = document.createElement('p')
-        notice.id = 'notice'
-        notice.setAttribute('role', 'status')
-        notice.setAttribute('aria-live', 'polite')
-        main.append(notice)
-
+        frame.src = POND_BASE + '/assets/pond.html'
         document.body.append(overlay)
         this.overlay = overlay
-        this.shadow = shadow
-        this.bridge = this.createBridge()
-        // The renderer reads `window.koiPond` at module scope, so the bridge
-        // must exist before its scripts execute. It is removed on destroy so a
-        // later activation starts from a clean slate.
-        window.koiPond = this.bridge
-
-        const refraction = document.createElement('script')
-        refraction.src = POND_BASE + '/assets/koi-pond-refraction.js'
-        const script = document.createElement('script')
-        script.src = POND_BASE + '/assets/koi-pond.js'
-        script.addEventListener('load', () => { void this.sync() }, { once: true })
-        // Appending the scripts last guarantees the bridge is already installed.
-        shadow.append(refraction, script)
+        this.frame = frame
         return overlay
+      }
+
+      /** Surface a blocked-iframe failure in the parent, where it is visible. */
+      reportFrameFailure() {
+        const message = document.createElement('p')
+        message.textContent = '鱼塘无法在此窗口中显示：内嵌页面被浏览器策略阻止。'
+        Object.assign(message.style, {
+          position: 'absolute', left: '50%', top: '50%', transform: 'translate(-50%,-50%)',
+          color: '#f1ebc6', font: '14px system-ui', background: '#123e35', padding: '16px 24px',
+          borderRadius: '8px', border: '1px solid #c5b777',
+        })
+        this.overlay?.append(message)
       }
 
       /**
@@ -214,6 +144,13 @@ window.__ModuleLoader__.load({
        */
       createBridge() {
         const listeners = { visibility: new Set(), state: new Set(), running: new Set() }
+
+        // One bad listener must not stop the rest from being notified.
+        const emit = (key, value) => {
+          for (const listener of [...listeners[key]]) {
+            try { listener(value) } catch (error) { console.warn('dsh-pondkoi: listener failed', error) }
+          }
+        }
         return {
           // The renderer chains `.catch()` onto close(), so it must be thenable.
           close: () => { this.close(); return Promise.resolve() },
@@ -239,11 +176,15 @@ window.__ModuleLoader__.load({
 
       open() {
         if (this.destroyed) return
+        // mount() can fail; surface that instead of dereferencing an undefined overlay.
         const overlay = this.mount()
+        if (!overlay) return
         overlay.style.display = 'block'
+        // A frame that is already loaded does not fire `load` again, so publish
+        // visibility here as well as from the load handler.
         this.bridge._emit('visibility', true)
-        window.dispatchEvent(new Event('resize'))
-        void this.sync()
+        const doc = this.frame?.contentDocument
+        if (doc && doc.readyState === 'complete') void this.sync()
       }
 
       close() {
@@ -271,7 +212,7 @@ window.__ModuleLoader__.load({
         this.destroyed = true
         this.overlay?.remove()
         this.overlay = null
-        this.shadow = null
+        this.frame = null
         if (window.koiPond === this.bridge) window.koiPond = undefined
         this.bridge = null
       }
@@ -366,6 +307,7 @@ window.__ModuleLoader__.load({
       let startTop = start.y
 
       const setLabel = text => { label.textContent = text; button.title = text; button.setAttribute('aria-label', text) }
+      setLabel('后院鱼塘')
       const placement = top => {
         host.setAttribute('data-placement', (window.innerHeight || 600) - (top + size) < 48 ? 'top' : 'bottom')
       }

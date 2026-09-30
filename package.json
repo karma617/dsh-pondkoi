@@ -1,68 +1,68 @@
 {
-    "name":  "dsh-pondkoi",
-    "version":  "1.0.1",
-    "description":  "后院鱼塘：为 DSH 增加可投喂、可繁育的锦鲤池塘，成长由真实主会话对话驱动。",
-    "license":  "MIT",
-    "type":  "module",
-    "main":  "./index.js",
-    "exports":  {
-                    ".":  "./index.js",
-                    "./client":  "./client.js",
-                    "./cordis.patch.yml":  "./cordis.patch.yml",
-                    "./package.json":  "./package.json"
-                },
-    "files":  [
-                  "index.js",
-                  "client.js",
-                  "cordis.patch.yml",
-                  "src/",
-                  "assets/",
-                  "README.md"
-              ],
-    "engines":  {
-                    "node":  "\u003e=22.19.0"
-                },
-    "keywords":  [
-                     "deepseek-harness",
-                     "dsh",
-                     "koi",
-                     "pond",
-                     "插件"
-                 ],
-    "repository":  {
-                       "type":  "git",
-                       "url":  "git+https://github.com/karma617/dsh-pondkoi.git"
-                   },
-    "peerDependencies":  {
-                             "@deepseek-ai/cordis":  "~4.0.4",
-                             "@deepseek-ai/dsh-api-remotes":  "0.2.0-rc.2",
-                             "@deepseek-ai/dsh-api-session-controller":  "0.2.0-rc.2",
-                             "@deepseek-ai/dsh-client-ui-renderer":  "0.2.0-rc.2",
-                             "@deepseek-ai/dsh-host-webserver":  "0.2.0-rc.2",
-                             "@deepseek-ai/schemastery":  "^3.18.1"
-                         },
-    "dsh":  {
-                "compatibility":  {
-                                      "host":  "\u003e=0.2.0-rc.2 \u003c0.3.0"
-                                  },
-                "bundle":  {
-                               "patch":  "./cordis.patch.yml"
-                           },
-                "client":  {
-                               "platform":  "web",
-                               "inject":  [
-                                              "@deepseek-ai/dsh-api-remotes",
-                                              "@deepseek-ai/dsh-api-session-controller",
-                                              "@deepseek-ai/dsh-client-ui-renderer"
-                                          ]
-                           }
-            },
-    "scripts":  {
-                    "test":  "node --test test/*.test.js"
-                },
-    "devDependencies":  {
-                            "@deepseek-ai/cordis":  "4.0.4",
-                            "@deepseek-ai/dsh-home-paths":  "0.2.0-rc.2",
-                            "@deepseek-ai/dsh-host-webserver":  "0.2.0-rc.2"
-                        }
+  "name": "dsh-pondkoi",
+  "version": "1.0.2",
+  "description": "后院鱼塘：为 DSH 增加可投喂、可繁育的锦鲤池塘，成长由真实主会话对话驱动。",
+  "license": "MIT",
+  "type": "module",
+  "main": "./index.js",
+  "exports": {
+    ".": "./index.js",
+    "./client": "./client.js",
+    "./cordis.patch.yml": "./cordis.patch.yml",
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "index.js",
+    "client.js",
+    "cordis.patch.yml",
+    "src/",
+    "assets/",
+    "README.md"
+  ],
+  "engines": {
+    "node": ">=22.19.0"
+  },
+  "keywords": [
+    "deepseek-harness",
+    "dsh",
+    "koi",
+    "pond",
+    "插件"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/karma617/dsh-pondkoi.git"
+  },
+  "peerDependencies": {
+    "@deepseek-ai/cordis": "~4.0.4",
+    "@deepseek-ai/dsh-api-gateway": "0.2.0-rc.2",
+    "@deepseek-ai/dsh-api-session-controller": "0.2.0-rc.2",
+    "@deepseek-ai/dsh-client-ui-renderer": "0.2.0-rc.2",
+    "@deepseek-ai/dsh-host-webserver": "0.2.0-rc.2",
+    "@deepseek-ai/schemastery": "^3.18.1"
+  },
+  "dsh": {
+    "compatibility": {
+      "host": ">=0.2.0-rc.2 <0.3.0"
+    },
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    },
+    "client": {
+      "platform": "web",
+      "inject": [
+        "@deepseek-ai/dsh-api-gateway",
+        "@deepseek-ai/dsh-api-session-controller",
+        "@deepseek-ai/dsh-client-ui-renderer"
+      ]
+    }
+  },
+  "scripts": {
+    "test": "node --test test/*.test.js"
+  },
+  "devDependencies": {
+    "@deepseek-ai/cordis": "4.0.4",
+    "@deepseek-ai/dsh-home-paths": "0.2.0-rc.2",
+    "@deepseek-ai/dsh-host-webserver": "0.2.0-rc.2"
+  }
 }
