@@ -78,7 +78,10 @@ window.__ModuleLoader__.load({
        * renderer's `window.koiPond` read at module scope is always satisfied.
        */
       mount() {
-        if (this.overlay || this.destroyed) return
+        // Idempotent: a second open must return the live overlay rather than
+        // undefined, which the caller would read as a mount failure.
+        if (this.destroyed) return undefined
+        if (this.overlay) return this.overlay
         const overlay = document.createElement('div')
         overlay.id = 'dsh-pondkoi-overlay'
         Object.assign(overlay.style, {
@@ -273,6 +276,7 @@ window.__ModuleLoader__.load({
         button:active { cursor: grabbing; transform: scale(.96); }
         button:focus-visible { filter: drop-shadow(0 0 6px #40877f); }
         button:disabled { opacity: .6; cursor: wait; }
+        button img { width: 100%; height: 100%; display: block; object-fit: contain; pointer-events: none; }
         span {
           position: absolute; left: 50%; transform: translateX(-50%); white-space: nowrap;
           font: 12px system-ui; background: #173e39; color: #fff; padding: 6px 10px;
@@ -288,14 +292,15 @@ window.__ModuleLoader__.load({
       const button = document.createElement('button')
       button.type = 'button'
       const label = document.createElement('span')
-      const icon = document.createElementNS('http://www.w3.org/2000/svg', 'svg')
-      icon.setAttribute('viewBox', '0 0 64 64')
-      icon.setAttribute('width', '100%')
-      icon.setAttribute('height', '100%')
-      icon.innerHTML = '<circle cx="32" cy="32" r="30" fill="#0d3733" stroke="#c8b273" stroke-width="2"/>'
-        + '<path d="M18 40c6-10 16-12 24-6-4 8-14 12-24 6z" fill="#f3ece0"/>'
-        + '<path d="M42 34c4-4 8-3 10 0-3 3-7 4-10 0z" fill="#e07a4f"/>'
-        + '<circle cx="27" cy="33" r="1.6" fill="#12332f"/>'
+      // The toggle uses the shipped lotus artwork. The shell build inlined the
+      // same bitmap as a base64 data URI; over HTTP the plugin serves it from
+      // its asset route instead, with a 2x source for high-DPI displays.
+      const icon = document.createElement('img')
+      icon.alt = ''
+      icon.draggable = false
+      icon.decoding = 'async'
+      icon.src = POND_BASE + '/assets/koi-pond-toggle.png'
+      icon.srcset = POND_BASE + '/assets/koi-pond-toggle.png 1x, ' + POND_BASE + '/assets/koi-pond-toggle@2x.png 2x'
       button.append(icon)
       shadow.append(button, label)
 
