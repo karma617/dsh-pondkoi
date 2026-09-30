@@ -3,6 +3,7 @@ import { readFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { resolveDshHome } from '@deepseek-ai/dsh-home-paths'
+import z from '@deepseek-ai/schemastery'
 import { PondStore } from './src/store.js'
 import { fetchLiveWeather } from './src/weather.js'
 import {
@@ -26,11 +27,20 @@ export const inject = ['webServer']
 
 const ASSET_DIR = fileURLToPath(new URL('./assets/', import.meta.url))
 
-const Config = {
-  saveFile: 'dsh-pondkoi.json',
-  capacity: 16,
-  liveWeather: true,
-}
+/**
+ * Config schema. Cordis calls `runtime.Config['~standard'].validate(config)`,
+ * so this MUST be a Standard Schema (schemastery), not a plain object — a plain
+ * object makes `~standard` undefined and the plugin fails to activate.
+ * Every field carries its default, which is what `apply` receives.
+ */
+export const Config = z.object({
+  /** Save file name, relative to the DSH home. Must not contain separators. */
+  saveFile: z.string().default('dsh-pondkoi.json'),
+  /** Maximum fish plus unhatched eggs. */
+  capacity: z.natural().min(1).max(16).default(16),
+  /** Whether to answer the weather route from Open-Meteo. */
+  liveWeather: z.boolean().default(true),
+})
 
 /**
  * Only these basenames are servable. The list is derived from the shipped
@@ -109,8 +119,21 @@ function pondRoutes(service) {
   ]
 }
 
-export function apply(ctx, config = Config) {
-  const settings = { ...Config, ...config }
+/**
+ * Cordis invokes the plugin as `callback(ctx, config)` with the already
+ * validated config, so no schema resolution belongs here. The save file name is
+ * still re-checked because it becomes a path segment.
+ */
+export function apply(ctx, config = {}) {
+  const settings = {
+    saveFile: 'dsh-pondkoi.json',
+    capacity: 16,
+    liveWeather: true,
+    ...config,
+  }
+  if (!/^[\w.-]+$/.test(settings.saveFile)) {
+    throw new Error('dsh-pondkoi: saveFile must be a plain file name')
+  }
   const store = new PondStore(join(resolveDshHome(), settings.saveFile), { capacity: settings.capacity })
   const service = { store, config: settings }
 

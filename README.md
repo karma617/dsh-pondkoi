@@ -80,17 +80,30 @@ npm install
 npm test
 ```
 
-48 个测试，覆盖：
+58 个测试，覆盖：
 
 - 存档：初始住户、去重（含重放与跨会话）、等级、配对产卵、孵化、一生一次繁育、容量上限、损坏存档保留、重载恢复、并发串行化。
 - 边界：`isBoundedId` 字符规则、资源类型映射、路由常量无尾斜杠、导出完整性。
 - 资源：渲染脚本引用的每个素材都真实存在，且没有残留相对路径。
 - 契约：渲染脚本与 `client.js` 之间的桥接口形状、桥安装时机先于脚本执行、`close()` 可链式 `.catch()`。
+- 激活：通过真实 cordis `Fiber` 走 `resolveConfig`，验证 `Config` 为 Standard Schema、默认值、越界值被拒、路由在激活时注册且在 fiber 卸载时注销。
 - 集成：在真实 `@deepseek-ai/dsh-host-webserver` 上跑真实 HTTP，验证状态、成长、改名、天气、资源字节（含 WebP 魔数）、目录穿越拒绝、跨域拒绝、超大体拒绝、方法拒绝。
+
+## 配置
+
+在 `cordis.patch.yml` 中可覆盖：
+
+| 字段 | 默认 | 说明 |
+| --- | --- | --- |
+| `saveFile` | `dsh-pondkoi.json` | `$DSH_HOME` 下的存档文件名，只允许普通文件名。 |
+| `capacity` | `16` | 鱼与未孵化卵合计上限，范围 1–16。 |
+| `liveWeather` | `true` | 是否响应 Open-Meteo 实时天气。 |
+
+`Config` 必须是 Standard Schema（`@deepseek-ai/schemastery` 的 `z.object`）。cordis 在 `resolveConfig` 中执行 `runtime.Config['~standard'].validate(config)`，若 `Config` 是普通对象，`~standard` 为 undefined，插件会在 `apply` 之前就激活失败并报 `Cannot read properties of undefined (reading 'validate')`。
 
 ## 已知限制
 
-- **未在真实 DSH `0.2.0-rc.2` 运行时中加载验证。** 本机只安装了 `0.2.0-rc.1`，插件契约（`dsh.client.inject` / `platform` / 默认导出 `apply` / `apply.inject`）是直接读取 npm 上 `0.2.0-rc.2` 各包的类型定义与实现核对得到的，宿主面集成测试用的是真实 `cordis@4.0.4` 与 `dsh-host-webserver@0.2.0-rc.2`，但**没有**跑通完整的 loader 装载链路。首次安装后请确认悬浮球出现。
+- **未在真实 DSH 完整 loader 链路中装载验证。** 本机只安装了 `0.2.0-rc.1`。宿主面已通过真实 cordis `Fiber` 激活路径与真实 `dsh-host-webserver` 验证，但**客户端面**（`dsh.client.inject` 注入、`window.__ModuleLoader__.load` 执行）未在真实运行时跑通。首次安装后请确认悬浮球出现。
 - 客户端成长观察依赖 `@deepseek-ai/dsh-api-session-controller` 的会话列表快照结构；若该结构在后续版本变化，成长会停止（投喂仍可用），需重新核对。
 - 实时天气需要出网；失败时静默降级为本地季节／时段表现。
 
