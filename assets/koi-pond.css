@@ -24,7 +24,14 @@ main::before, main::after { content: ""; position: absolute; inset: 0; pointer-e
 main::before { background: radial-gradient(circle at 48% 42%, transparent 38%, #031c1940 76%, #00120f92 116%), radial-gradient(circle at 24% 4%, var(--scene-glow), transparent 38%); box-shadow: inset 0 0 90px #001c1838; }
 main::after { opacity: .055; background-image: radial-gradient(#fff 0.45px, transparent .7px), radial-gradient(#071b16 0.45px, transparent .75px); background-position: 0 0, 2px 2px; background-size: 4px 4px; mix-blend-mode: soft-light; }
 canvas { position: relative; z-index: 0; width: 100%; height: 100%; display: block; outline-offset: -5px; }
-main.zen > :not(canvas) { display: none; }
+main.zen > :not(canvas):not(.corner-scenic-notch) { display: none; }
+/* 右上角水榭留白基座：自然承托系统控制按钮，双圆弧优雅内凹，宛若白玉雕台 */
+.corner-scenic-notch {
+  position: absolute; top: 0; right: 0;
+  width: max(220px, calc(220 * var(--unit))); height: max(48px, calc(48 * var(--unit)));
+  pointer-events: none; z-index: 2; overflow: visible;
+}
+.notch-svg { width: 100%; height: 100%; display: block; }
 main.zen canvas { outline: none; }
 header {
   position: absolute; top: 3.7%; left: 1.85%; right: 1.85%;
@@ -44,7 +51,7 @@ header {
 header .eyebrow { font-size: calc(9 * var(--unit)); line-height: 1.2; margin-bottom: calc(8 * var(--unit)); }
 h1 { margin: 0; font: calc(34 * var(--unit))/1.05 "SimSun", serif; letter-spacing: calc(6 * var(--unit)); text-shadow: 0 2px 2px #001d1d, 0 0 18px #e8d79820; }
 h1 span { display: block; font: calc(13 * var(--unit)) "Microsoft YaHei", sans-serif; letter-spacing: 2px; margin-top: calc(10 * var(--unit)); }
-.window-tools { display: flex; align-items: center; gap: calc(10 * var(--unit)); margin-left: auto; margin-right: max(148px, calc(148 * var(--unit))); align-self: flex-start; padding-top: calc(10 * var(--unit)); pointer-events: auto; }
+.window-tools { display: flex; align-items: center; gap: calc(10 * var(--unit)); margin-left: auto; margin-right: max(225px, calc(225 * var(--unit))); align-self: flex-start; padding-top: calc(10 * var(--unit)); pointer-events: auto; }
 .running-sessions { position: absolute; z-index: 4; top: 18%; left: 2%; width: min(280px, 25vw); max-height: 48%; overflow: auto; padding: calc(16 * var(--unit)); background: #052e29a8; border: 1px solid #c3ae7566; border-radius: 10px; backdrop-filter: blur(8px); box-shadow: 0 8px 24px #00191555; }
 .running-sessions .eyebrow { margin: 0 0 calc(10 * var(--unit)); }
 .running-item { display: flex; align-items: flex-start; justify-content: space-between; gap: 10px; padding: calc(9 * var(--unit)) 0; border-top: 1px solid #c3ae7538; font-size: calc(13 * var(--unit)); }
@@ -171,7 +178,7 @@ body[data-weather="heavy_snow"] .garden-label b#weather-name { color: #e4f3f7; }
   header { top: 22px; left: 20px; right: 18px; }
   header .eyebrow { font-size: 7px; letter-spacing: 1.3px; }
   h1 { font-size: 26px; } h1 span { font-size: 10px; letter-spacing: 1px; }
-  .window-tools { gap: 6px; margin-right: 120px; }
+  .window-tools { gap: 6px; margin-right: 180px; }
   aside { right: 18px; top: 125px; width: 205px; max-height: calc(100vh - 230px); overflow-y: auto; overflow-x: hidden; padding: 17px; }
   body.night aside { top: 125px; }
   aside::before { display: none; }
