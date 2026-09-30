@@ -41,7 +41,7 @@ dsh plugin --profile web add <path-or-tarball>
 | `src/routes.js` | 路由常量、输入边界、响应工具。 |
 | `src/weather.js` | Open-Meteo 实时天气（IP 定位，可失败降级）。 |
 | `cordis.patch.yml` | bundle patch，向 patch 栈插入本插件。 |
-| `assets/` | 庭院美术、折射内核与渲染脚本。 |
+| ssets/ | 庭院美术、折射内核与渲染脚本，以及池塘 iframe 文档 pond.html。 |
 
 宿主提供四个接口，客户端只通过它们通信：
 
@@ -51,7 +51,7 @@ dsh plugin --profile web add <path-or-tarball>
 | `/plugins/dsh-pondkoi/dialogue` | POST | 记录一次成功对话。 |
 | `/plugins/dsh-pondkoi/rename` | POST | 改名。 |
 | `/plugins/dsh-pondkoi/weather` | GET | 实时天气，失败返回 `null`。 |
-| `/plugins/dsh-pondkoi/assets/*` | GET | 静态美术资源。 |
+| /plugins/dsh-pondkoi/assets/* | GET | 静态美术资源与池塘 iframe 文档。 |
 
 存档位置：`$DSH_HOME/dsh-pondkoi.json`（默认 `~/.dsh/dsh-pondkoi.json`）。等级、名字、代际、鱼卵与消息去重键都在这里；去重键永不下发给客户端。
 
@@ -59,7 +59,7 @@ dsh plugin --profile web add <path-or-tarball>
 
 桌面版把池塘做成 Electron 的 `WebContentsView` + 沙箱 preload，成长观察靠在主世界里改写聊天模块的 `prompt` 方法。DSH 插件没有这些特权，因此：
 
-- **画面**：改为在 DSH 页面内挂载覆盖层，而不是独立原生视图。切换池塘不会导航或销毁聊天页，工作区、会话与草稿都保留。
+- **画面**：改为在 DSH 页面内挂载一个 same-origin iframe（`assets/pond.html`），而不是独立原生视图。用 iframe 而非 shadow DOM 是必须的：渲染脚本用 `document.getElementById` 取元素，而该查询不穿透 shadow 边界，会拿到 `null` 并导致画面全黑。iframe 恢复了原版 `WebContentsView` 的「独立 document」不变量，因此 `assets/koi-pond.js` 除资源路径外无需任何改动。切换池塘不会导航或销毁聊天页，工作区、会话与草稿都保留。
 - **通信**：preload 的 `window.koiPond` 桥保留同名同形状，但由同源 HTTP 实现。渲染脚本 `assets/koi-pond.js` 除资源路径外未作改动。
 - **资源路径**：原版用相对路径（`file://` 下有效）。在页面内相对路径会解析到应用根目录导致 404，因此统一改为 `/plugins/dsh-pondkoi/assets/` 绝对前缀。
 - **成长观察**：不再改写 `prompt`。客户端订阅公开的会话列表，按主会话用户消息数递增上报，并以消息序号作为去重键。**语义略有差异**：桌面版统计「`prompt` 返回 `ok: true`」，本版统计「主会话新增用户消息」。发送失败、助手回复、工具事件与历史加载都不计入；子智能体会话不计入。
@@ -80,7 +80,7 @@ npm install
 npm test
 ```
 
-58 个测试，覆盖：
+61 个测试，覆盖：
 
 - 存档：初始住户、去重（含重放与跨会话）、等级、配对产卵、孵化、一生一次繁育、容量上限、损坏存档保留、重载恢复、并发串行化。
 - 边界：`isBoundedId` 字符规则、资源类型映射、路由常量无尾斜杠、导出完整性。
@@ -103,7 +103,7 @@ npm test
 
 ## 已知限制
 
-- **未在真实 DSH 完整 loader 链路中装载验证。** 本机只安装了 `0.2.0-rc.1`。宿主面已通过真实 cordis `Fiber` 激活路径与真实 `dsh-host-webserver` 验证，但**客户端面**（`dsh.client.inject` 注入、`window.__ModuleLoader__.load` 执行）未在真实运行时跑通。首次安装后请确认悬浮球出现。
+- **已在真实 DSH `0.2.0-rc.2` web 运行时装载验证。** 用 npm 上的 `@deepseek-ai/dsh@0.2.0-rc.2` 启动 `dsh web`，插件装入隔离的 `DSH_HOME`，再用 Chrome CDP 驱动真实页面：21 项断言全部通过（启动审计无失败项、悬浮球安装并带标签、池塘打开、桥与折射内核就绪、canvas 764×485 且 90000 像素已绘制、渲染出 4 条鱼、素材加载、无页面异常、Escape 可关闭），并实测对话使等级 0→1、重放被拒、CJK 改名落盘。**未验证**：真实聊天发送驱动的成长（仅用 HTTP 直接打 `/dialogue` 验证了计数逻辑）。
 - 客户端成长观察依赖 `@deepseek-ai/dsh-api-session-controller` 的会话列表快照结构；若该结构在后续版本变化，成长会停止（投喂仍可用），需重新核对。
 - 实时天气需要出网；失败时静默降级为本地季节／时段表现。
 
