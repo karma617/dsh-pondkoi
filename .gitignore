@@ -2,5 +2,9 @@ node_modules/
 *.tgz
 *.log
 .DS_Store
+# Tests are intentionally not published: this rule predates the plugin work
+# and is kept as-is by project decision. The 72 local tests (npm test) include
+# the regression checks that caught the growth-counting bug; they stay on the
+# author machine only, so a fresh clone cannot reproduce that verification.
 test
 package-lock.json
