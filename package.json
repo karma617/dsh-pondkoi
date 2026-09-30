@@ -1,6 +1,6 @@
 {
   "name": "dsh-pondkoi",
-  "version": "1.0.6",
+  "version": "1.0.7",
   "description": "后院鱼塘：为 DSH 增加可投喂、可繁育的锦鲤池塘，成长由真实主会话对话驱动。",
   "license": "MIT",
   "type": "module",
