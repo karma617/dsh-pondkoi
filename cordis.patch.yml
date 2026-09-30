@@ -1,0 +1,12 @@
+# dsh-pondkoi bundle patch
+# The host half owns persistence and the growth ledger; the client half owns the
+# canvas garden. Growth is recorded on the host so it survives a closed window,
+# and the client only renders what the host reports.
+- insert:
+    - id: dsh-pondkoi
+      name: 'dsh-pondkoi'
+      config:
+        saveFile: 'dsh-pondkoi.json'
+        capacity: 16
+        liveWeather: true
+        runEvents: true
