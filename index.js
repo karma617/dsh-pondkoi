@@ -1,12 +1,12 @@
-import { readdirSync } from 'node:fs'
 import { readFile } from 'node:fs/promises'
-import { join } from 'node:path'
+import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { resolveDshHome } from '@deepseek-ai/dsh-home-paths'
 import z from '@deepseek-ai/schemastery'
 import { PondStore } from './src/store.js'
 import { fetchLiveWeather } from './src/weather.js'
 import {
+  ASSET_CONTENT_TYPES,
   ASSET_ROUTE,
   DIALOGUE_ROUTE,
   RENAME_ROUTE,
@@ -43,15 +43,31 @@ export const Config = z.object({
 })
 
 /**
- * Only these basenames are servable. The list is derived from the shipped
- * assets directory rather than hand-written, so a renamed or added asset
- * cannot silently 404 and a hand-typed name cannot drift from the file on
- * disk. Membership is still checked before any read, so a traversal attempt
- * (`..`, an absolute path, a subdirectory) can never escape the directory.
+ * Resolve one requested asset to an absolute path inside the assets directory,
+ * or undefined when it must not be served.
+ *
+ * The directory is read per request rather than snapshotted at module load.
+ * A snapshot goes stale as soon as the package is updated on disk: the running
+ * process keeps serving the old name set, so a newly shipped asset returns 404
+ * until the host restarts (this is exactly how the toggle icon first broke).
+ *
+ * Safety comes from name validation plus a containment check, not from a frozen
+ * list: the name must be a flat basename with no separators, no parent
+ * reference, no control characters and a permitted extension, and the resolved
+ * path must stay inside the assets directory.
  */
-const ASSET_NAMES = new Set(readdirSync(ASSET_DIR, { withFileTypes: true })
-  .filter(entry => entry.isFile())
-  .map(entry => entry.name))
+export function resolveAsset(name) {
+  if (typeof name !== 'string' || name.length === 0 || name.length > 128) return undefined
+  // Reject anything but a flat file name: no separators, no `..`, no NUL/C0/DEL.
+  if (!/^[A-Za-z0-9][A-Za-z0-9._@-]*$/.test(name)) return undefined
+  if (name.includes('..')) return undefined
+  const extension = name.slice(name.lastIndexOf('.'))
+  if (!Object.hasOwn(ASSET_CONTENT_TYPES, extension)) return undefined
+  const resolved = resolve(ASSET_DIR, name)
+  // Containment: the result must sit directly inside ASSET_DIR.
+  if (dirname(resolved) !== resolve(ASSET_DIR)) return undefined
+  return resolved
+}
 
 /** Reject cross-origin requests: the pond is same-origin only. */
 function sameOrigin(req) {
@@ -98,14 +114,15 @@ function pondRoutes(service) {
     { kind: 'prefix', path: ASSET_ROUTE, handler: guard(async (req, res) => {
       if (req.method !== 'GET' && req.method !== 'HEAD') { res.writeHead(405, { allow: 'GET, HEAD' }); res.end(); return }
       // Strip the query, then the route prefix and its separator, leaving only
-      // the asset basename. Membership in ASSET_NAMES is checked before any
-      // read, so `..` or a subdirectory can never escape the assets directory.
+      // the asset basename. resolveAsset validates the name and proves the
+      // result stays inside the assets directory before anything is read.
       const requested = req.url.split('?')[0]
       const name = decodeURIComponent(requested.slice(requested.indexOf(ASSET_ROUTE) + ASSET_ROUTE.length).replace(/^\/+/, ''))
-      if (!ASSET_NAMES.has(name)) { res.writeHead(404); res.end('not found'); return }
+      const target = resolveAsset(name)
+      if (target === undefined) { res.writeHead(404); res.end('not found'); return }
       let body
       try {
-        body = await readFile(join(ASSET_DIR, name))
+        body = await readFile(target)
       } catch {
         res.writeHead(404); res.end('not found'); return
       }
