@@ -392,34 +392,58 @@ window.__ModuleLoader__.load({
       window.addEventListener('keydown', onKey)
 
       /**
-       * Growth observation. The shell build wrapped the chat module's `prompt`
-       * method through an Electron module-factory transform. A client plugin
-       * already lives inside the page's module graph, so it reads the public
-       * session surface instead: a strictly increasing user-message count for
-       * the main session is the send signal, and sub-agent sessions are skipped
-       * the same way the shell skipped `address !== undefined`.
+       * Growth observation.
+       *
+       * The shell build wrapped the chat module's `prompt` method and counted a
+       * dialogue when it returned `ok: true`. An earlier version of this plugin
+       * instead read `sessions.list` snapshots and counted user messages, which
+       * was wrong: the real snapshot is `{ ids, byId, phase }` and its rows carry
+       * `running` / `retainedBy` — there is no `current` and no `messages`, so the
+       * count never advanced.
+       *
+       * The correct public signal is the same one the shell UI uses to decide
+       * whether a turn is still running: `remote.$on('api-session/status')` with
+       * `(sessionId, running)`. A `true → false` transition is one completed
+       * main-conversation turn, which matches the shell's `ok: true` semantics.
+       *
+       * `sessions.list` is consulted only to skip sub-agent sessions, mirroring
+       * the shell's `address !== undefined` check, and its absence is not fatal.
        */
       const observe = () => {
+        const remote = ctx.remote
+        if (!remote || typeof remote.$on !== 'function') return () => {}
         const sessions = ctx.sessions
-        if (!sessions || typeof sessions.list?.subscribe !== 'function') return () => {}
-        const seen = new Map()
-        return sessions.list.subscribe(snapshot => {
+        const running = new Map()
+        // One counter per session; a turn that never flips to false is ignored.
+        const turn = new Map()
+
+        const isSubagent = sessionId => {
           try {
-            const current = snapshot && snapshot.current
-            if (typeof current !== 'string') return
-            const entry = snapshot.byId && snapshot.byId[current]
-            if (!entry) return
-            const messages = Array.isArray(entry.messages) ? entry.messages : []
-            let userCount = 0
-            for (const message of messages) {
-              if (message && (message.role === 'user' || message.author === 'user')) userCount++
-            }
-            const previous = seen.get(current)
-            seen.set(current, userCount)
-            if (previous === undefined || userCount <= previous) return
+            const list = sessions && sessions.list && sessions.list.getSnapshot && sessions.list.getSnapshot()
+            const row = list && list.byId && list.byId[sessionId]
+            // The main view retains the session it is showing; sub-agents do not.
+            if (row && row.retainedBy) return (row.retainedBy.mainView ?? 0) === 0
+            return false
+          } catch {
+            return false
+          }
+        }
+
+        return remote.$on('api-session/status', (sessionId, isRunning) => {
+          try {
+            if (typeof sessionId !== 'string' || sessionId.length === 0) return
+            const was = running.get(sessionId) === true
+            running.set(sessionId, isRunning === true)
+            // Count only the completed edge of a turn that was actually running.
+            if (!was || isRunning !== false) return
+            if (isSubagent(sessionId)) return
+            const next = (turn.get(sessionId) ?? 0) + 1
+            turn.set(sessionId, next)
+            // The host de-duplicates on (sessionId, requestId); the turn ordinal is
+            // a stable, monotonic request id for this client.
             void request('/dialogue', {
               method: 'POST',
-              body: JSON.stringify({ sessionId: current, requestId: String(userCount) }),
+              body: JSON.stringify({ sessionId, requestId: 'turn-' + next }),
             }).catch(error => console.warn('dsh-pondkoi: 成长记录未送达，聊天发送结果保持不变', error))
           } catch (error) {
             console.warn('dsh-pondkoi: 成长观察跳过一轮更新', error)
